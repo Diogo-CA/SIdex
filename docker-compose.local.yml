@@ -1,0 +1,62 @@
+# =============================================================================
+# SIdex - stack COMPLETA para rodar na maquina local (sem a VM)
+# Uso:  docker compose -f docker-compose.local.yml up --build
+# Front: http://localhost:8081     API: http://localhost:8080/SIdex
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # BANCO DE DADOS (o que antes vivia na VM)
+  # ---------------------------------------------------------------------------
+  db:
+    image: mysql:8.0
+    container_name: pokemon-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: db_projeto
+      MYSQL_USER: devuser
+      MYSQL_PASSWORD: OvO123
+    ports:
+      - "3307:3306"   # 3307 no host pra nao brigar com um MySQL ja instalado
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # BACKEND (Java / Tomcat 9)
+  # ---------------------------------------------------------------------------
+  backend:
+    build: ./backend
+    container_name: pokemon-backend
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: "jdbc:mysql://db:3306/db_projeto?useTimezone=true&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8"
+      DB_USER: "devuser"
+      DB_PASSWORD: "OvO123"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # FRONTEND (TypeScript compilado + Nginx)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build: ./frontend
+    container_name: pokemon-frontend
+    ports:
+      - "8081:80"   # 8081 pra evitar conflito na porta 80 do Windows
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  db_data:
